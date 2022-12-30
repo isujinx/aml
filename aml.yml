@@ -1,0 +1,164 @@
+version: "3.8"
+services:
+      
+  gluetun:
+    image: qmcgaw/gluetun
+    container_name: gluetun
+    cap_add:
+      - NET_ADMIN  # required to perform network ops - https://man7.org/linux/man-pages/man7/capabilities.7.html
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      - 8888:8888/tcp # HTTP proxy
+      - 8388:8388/tcp # Shadowsocks
+      - 8388:8388/udp # Shadowsocks
+      - 8112:8112 # port for deluge, comment out if only the other one
+      - 6789:6789 # port for NZBGet, comment out if only the other one
+      # If you use more download clients, you will need to add those portmappings here
+    volumes:
+      - /volume1/docker/gluetun:/gluetun
+    environment:
+      VPN_SERVICE_PROVIDER: ${VPN_SERVICE_PROVIDER}
+      VPN_TYPE: ${VPN_TYPE}
+      OPENVPN_USER: ${OPENVPN_USER}
+      OPENVPN_PASSWORD: ${OPENVPN_PASSWORD}
+      SERVER_COUNTRIES: ${SERVER_COUNTRIES}
+      TZ: ${TIMEZONE}
+      HTTPPROXY: "on" #change to off if you don't wish to enable
+      SHADOWSOCKS: "on" #change to off if you don't wish to enable
+    networks: 
+       - aml_bridge
+    healthcheck:
+       retries: 3   # I found that the standard 1 retry wasn't enough time to let the tunnel get up before reporting "healthy" for the download clients to connect
+    restart: unless-stopped
+    
+  deluge:
+    image: linuxserver/deluge
+    container_name: deluge
+    environment:
+      - PUID=${DOCKERPUID}
+      - PGID=${DOCKERPGID}
+      - TZ=${TIMEZONE}
+      - DELUGE_LOGLEVEL=error #optional
+    volumes:
+      - /volume1/docker/deluge:/config
+      - /volume1/data/torrents:/data/torrents
+    network_mode: service:gluetun # run on the vpn network
+    depends_on:   #makes sure that the gluetun tunnel is up before trying to start the container
+      gluetun:
+         condition: service_healthy 
+    restart: unless-stopped
+
+  nzbget:
+    image: linuxserver/nzbget
+    container_name: nzbget
+    environment:
+      - PUID=${DOCKERPUID}
+      - PGID=${DOCKERPGID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - /volume1/docker/nzbget:/config
+      - /volume1/data/usenet:/data/usenet
+    network_mode: service:gluetun # run on the vpn network
+    depends_on:    #makes sure that the gluetun tunnel is up before trying to start the container
+      gluetun:
+         condition: service_healthy
+    restart: unless-stopped
+    
+  sonarr:
+    image: linuxserver/sonarr:latest
+    container_name: sonarr
+    environment:
+      - PUID=${DOCKERPUID}
+      - PGID=${DOCKERPGID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - /volume1/docker/sonarr:/config
+      - /volume1/data/postprocessing:/downloads  #Yes, I'm aware that splitting this out breaks atomic-copy and hardlinking, but I'm re-encoding anyways, so it will be a new file regardless.  Open to options!
+      - /volume1/data/media/tv:/tv
+    ports:
+      - 8989:8989
+    networks: 
+    - aml_bridge
+    restart: unless-stopped
+    
+  radarr:
+    image: linuxserver/radarr:latest
+    container_name: radarr
+    environment:
+      - PUID=${DOCKERPUID}
+      - PGID=${DOCKERPGID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - /volume1/docker/radarr:/config
+      - volume1/data/postprocessing:/downloads
+      - /volume1/data/media/movies:/movies
+    ports:
+      - 7878:7878
+    networks: 
+    - aml_bridge
+    restart: unless-stopped
+    
+  readarr:
+    image: linuxserver/readarr:develop  #Readarr currently only offers a developer release, so "latest" isnt an option
+    container_name: readarr
+    environment:
+      - PUID=${DOCKERPUID}
+      - PGID=${DOCKERPGID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - /volume1/docker/readarr/:/config
+      - /volume1/data/:/data
+    ports:
+      - 8787:8787
+    networks: 
+    - aml_bridge
+    restart: unless-stopped
+    
+  lidarr:
+    image: linuxserver/lidarr:latest
+    container_name: lidarr
+    environment:
+      - PUID=${DOCKERPUID}
+      - PGID=${DOCKERPGID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - /volume1/data:/data
+      - /volume1/docker/lidarr:/config
+    ports:
+      - 8686:8686
+    networks: 
+    - aml_bridge
+    restart: unless-stopped
+    
+  handbrake:
+    image: jlesage/handbrake:latest  #https://github.com/jlesage/docker-handbrake
+    container_name: handbrake
+    environment:
+     - HANDBRAKE_DEBUG=0  #Set to 1 if you need debug logging, but takes up a lot of space quickly
+     - USER_ID=${DOCKERPUID}
+     - GROUP_ID=${DOCKERPGID}
+     - TZ=${TIMEZONE}
+     - AUTOMATED_CONVERSION_PRESET=General/myh265  #my custom handbrake profile based on the SpaceInvader One video 
+     - AUTOMATED_CONVERSION_FORMAT=mkv
+     - AUTOMATED_CONVERSION_KEEP_SOURCE="0" #Setting to 0 will delete the original file after a successful conversion
+     - AUTOMATED_CONVERSION_OUTPUT_SUBDIR=SAME_AS_SRC #SAME_AS_SRC will keep the folder structure relative to base dir when converting
+    ports:
+     - 5800:5800
+    volumes:
+     - /volume1/docker/handbrake:/config
+     - /volume1/docker/handbrake:/storage
+     - /volume1/data/usenet/completed:/watch  #primary watch folder
+     - /volume1/data/torrents/copied:/watch2   #added secondary watch folder for torrents if i ever get this working...
+     - /volume1/data/postprocessing:/output
+    networks:
+     - aml_bridge
+    restart: unless-stopped  
+    
+    #Need to add in jellyfin/jellyseer yet
+    
+networks:
+  aml_bridge:
+     name: aml_bridge
+  
+    
