@@ -1,0 +1,56 @@
+Synology NAS: (DS1821+)
+1. Control Paenel -> Task Scheduler -> Create -> Triggered Task -> User-defined Script
+    Name: VPNTUN
+    Event: Boot-up
+    Script:  #!/bin/sh -e
+             insmod /lib/modules/tun.ko
+    Purpose: Inserts the tun.ko module into the kernel so that you can bring up a tunnel with the gluetun container.  Might not be necessary on your system, but was on mine.
+    
+2. (Optional - this will run the docker-compose up command every time you boot the NAS, skip if you don't want that)  Control Paenel -> Task Scheduler -> Create -> Triggered Task -> User-defined Script
+    Name: AML Startup
+    Event: Boot-up
+    Pre-task: VPNTUN  (the task from above)
+    Script: bash /volume1/docker/automated_media_library/startup.sh
+    Purpose: Gives you a startup script to modify without having to go into task scheduler all the time.  You can rename the folder whatever you want, but I wanted it in with the rest of the docker stuff so I made a folder for automated_media_library 
+    
+3. Setup your folder structure.  You will need two shared folders, one called "data" and one called "docker".  All your downloads, media, etc... will live in "data", and all your persistent files for the Docker containers will live in "docker"
+    data   - media          - books
+                            - movies
+                            - music
+                            - tv
+           - postprocessing - media
+                            - movies
+                            - series
+           - torrents       - completed
+                            - copied
+                            - incoming
+                            - watch
+           - usenet         - completed
+                            - intermediate
+                            - nzb
+                            - queue
+    docker - automated_media_library
+           - deluge
+           - gluetun
+           - handbrake
+           - jellyfin
+           - jellyseer
+           - lidarr
+           - nzbget
+           - radarr
+           - readarr
+           - sonarr
+           
+4. (Optional - you can skip this and just run the docker- compose up command via SSH if you want.) Create your startup.sh script in the path from #2 above.  Mine was /volume1/docker/automated_media_library/startup.sh
+    Script contents:  #The sleep lets the TUN startup script run to completion first, so the gluetun container can establish a connection when it comes up
+                       sleep 30
+                       #This compose command will run the aml.yml file to build/update the group of containers
+                       docker-compose -f /volume1/docker/automated_media_library/aml.yml up -d
+                       
+5. Create your .env file and your aml.yml files in the same directory.  Both of these files are in the main repository, but you will need to fill out your own details on the .env file
+
+6. SSH into your NAS and run the docker-compose command from #4 above (docker-compose -f /volume1/docker/automated_media_library/aml.yml up -d)  You might need to sudo, depending on how your docker security/users are set up.  I had to use it.
+
+7. Check that all your containers came up, try and browse to the web-guis for each one
+
+8. to be continued...
