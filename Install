@@ -1,4 +1,4 @@
-Synology NAS: (DS1821+)
+Synology NAS: (DS1821+)  For DSM version >= 7.0 you can skip steps 1&2 (https://github.com/qdm12/gluetun/wiki/Synology-prerequisites) if you create a systemd unit file.
 1. Control Paenel -> Task Scheduler -> Create -> Triggered Task -> User-defined Script
     Name: VPNTUN
     Event: Boot-up
