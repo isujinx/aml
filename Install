@@ -18,9 +18,7 @@ Synology NAS: (DS1821+)  For DSM version >= 7.0 you can skip steps 1&2 (https://
                             - movies
                             - music
                             - tv
-           - postprocessing - media
-                            - movies
-                            - series
+           - transcode_cache
            - torrents       - completed
                             - copied
                             - incoming
@@ -32,7 +30,10 @@ Synology NAS: (DS1821+)  For DSM version >= 7.0 you can skip steps 1&2 (https://
     docker - automated_media_library
            - deluge
            - gluetun
-           - handbrake
+           - tdarr
+              - configs
+              - logs
+              - server
            - jellyfin
            - jellyseer
            - lidarr
@@ -40,6 +41,7 @@ Synology NAS: (DS1821+)  For DSM version >= 7.0 you can skip steps 1&2 (https://
            - radarr
            - readarr
            - sonarr
+           - heimdall
            
 4. (Optional - you can skip this and just run the docker- compose up command via SSH if you want.) Create your startup.sh script in the path from #2 above.  Mine was /volume1/docker/automated_media_library/startup.sh
     Script contents:  #The sleep lets the TUN startup script run to completion first, so the gluetun container can establish a connection when it comes up
