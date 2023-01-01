@@ -1,4 +1,10 @@
 version: "3.8"
+
+# The base of this compose file comes from the individual compose files posted at: https://drfrankenstein.co.uk/  with some minor changes
+# The addition of the reencoding idea came from: https://www.youtube.com/watch?v=NA_sO3rH2mU
+
+# I have added comments in this compose file for ease of use, and started to make use of the .env file
+
 services:
       
   gluetun:
@@ -12,8 +18,8 @@ services:
       - 8888:8888/tcp # HTTP proxy
       - 8388:8388/tcp # Shadowsocks
       - 8388:8388/udp # Shadowsocks
-      - 8112:8112 # port for deluge, comment out if only the other one
-      - 6789:6789 # port for NZBGet, comment out if only the other one
+      - 8112:8112 # port for deluge
+      - 6789:6789 # port for NZBGet
       # If you use more download clients, you will need to add those portmappings here
     volumes:
       - /volume1/docker/gluetun:/gluetun
@@ -29,7 +35,7 @@ services:
     networks: 
        - aml_bridge
     healthcheck:
-       retries: 3   # I found that the standard 1 retry wasn't enough time to let the tunnel get up before reporting "healthy" for the download clients to connect
+       retries: 3  #I found that the normal 1-try healthcheck didn't give enough time for the gluetun container to boot and establish the VPN connection
     restart: unless-stopped
     
   deluge:
@@ -44,9 +50,9 @@ services:
       - /volume1/docker/deluge:/config
       - /volume1/data/torrents:/data/torrents
     network_mode: service:gluetun # run on the vpn network
-    depends_on:   #makes sure that the gluetun tunnel is up before trying to start the container
+    depends_on:
       gluetun:
-         condition: service_healthy 
+         condition: service_healthy  #updated the Dr.Frankenstein code to use service_healthy condition instead of the default container started
     restart: unless-stopped
 
   nzbget:
@@ -60,9 +66,9 @@ services:
       - /volume1/docker/nzbget:/config
       - /volume1/data/usenet:/data/usenet
     network_mode: service:gluetun # run on the vpn network
-    depends_on:    #makes sure that the gluetun tunnel is up before trying to start the container
+    depends_on:
       gluetun:
-         condition: service_healthy
+         condition: service_healthy  #updated the Dr.Frankenstein code to use service_healthy condition instead of the default container started
     restart: unless-stopped
     
   sonarr:
@@ -74,8 +80,7 @@ services:
       - TZ=${TIMEZONE}
     volumes:
       - /volume1/docker/sonarr:/config
-      - /volume1/data/postprocessing:/downloads  #Yes, I'm aware that splitting this out breaks atomic-copy and hardlinking, but I'm re-encoding anyways, so it will be a new file regardless.  Open to options!
-      - /volume1/data/media/tv:/tv
+      - /volume1/data:/data
     ports:
       - 8989:8989
     networks: 
@@ -91,8 +96,7 @@ services:
       - TZ=${TIMEZONE}
     volumes:
       - /volume1/docker/radarr:/config
-      - volume1/data/postprocessing:/downloads
-      - /volume1/data/media/movies:/movies
+      - /volume1/data:/data
     ports:
       - 7878:7878
     networks: 
@@ -131,34 +135,107 @@ services:
     - aml_bridge
     restart: unless-stopped
     
-  handbrake:
-    image: jlesage/handbrake:latest  #https://github.com/jlesage/docker-handbrake
-    container_name: handbrake
-    environment:
-     - HANDBRAKE_DEBUG=0  #Set to 1 if you need debug logging, but takes up a lot of space quickly
-     - USER_ID=${DOCKERPUID}
-     - GROUP_ID=${DOCKERPGID}
-     - TZ=${TIMEZONE}
-     - AUTOMATED_CONVERSION_PRESET=General/myh265  #my custom handbrake profile based on the SpaceInvader One video 
-     - AUTOMATED_CONVERSION_FORMAT=mkv
-     - AUTOMATED_CONVERSION_KEEP_SOURCE="0" #Setting to 0 will delete the original file after a successful conversion
-     - AUTOMATED_CONVERSION_OUTPUT_SUBDIR=SAME_AS_SRC #SAME_AS_SRC will keep the folder structure relative to base dir when converting
+  tdarr:   #Tdarr can run multiple nodes, this is the server, which also contains an internal node for processing.  If you need additional nodes, use the template below
+    container_name: tdarr
+    image: ghcr.io/haveagitgat/tdarr:latest  # from https://docs.tdarr.io/docs/installation/docker/run-compose
+    restart: unless-stopped
+    networks: 
+    - aml_bridge
     ports:
-     - 5800:5800
+      - 8265:8265 # webUI port
+      - 8266:8266 # server port
+      - 8267:8267 # Internal node port
+      - 8268:8268 # Example extra node port
+    environment:
+      - PUID=${DOCKERPUID}
+      - PGID=${DOCKERPGID}
+      - TZ=${TIMEZONE}
+      - UMASK_SET=002
+      - serverIP=${NAS_IP}
+      - serverPort=8266
+      - webUIPort=8265
+      - internalNode=true
+      - nodeID=MyInternalNode
     volumes:
-     - /volume1/docker/handbrake:/config
-     - /volume1/docker/handbrake:/storage
-     - /volume1/data/usenet/completed:/watch  #primary watch folder
-     - /volume1/data/torrents/copied:/watch2   #added secondary watch folder for torrents if i ever get this working...
-     - /volume1/data/postprocessing:/output
+      - /volume1/docker/tdarr/server:/app/server
+      - /volume1/docker/tdarr/configs:/app/configs
+      - /volume1/docker/tdarr/logs:/app/logs
+      - /volume1/data/media:/media
+      - /volume1/data/transcode_cache:/temp
+
+  tdarr-node:  #Tdarr additional worker node - read up on how to use GPU encoding vs CPU... 
+    container_name: tdarr-node
+    image: ghcr.io/haveagitgat/tdarr_node:latest  #from https://docs.tdarr.io/docs/installation/docker/run-compose
+    restart: unless-stopped
+    network_mode: service:tdarr
+    environment:
+      - PUID=${DOCKERPUID}
+      - PGID=${DOCKERPGID}
+      - TZ=${TIMEZONE}
+      - UMASK_SET=002
+      - nodeID=MainNode
+      - serverIP=${NAS_IP}
+      - serverPort=8266
+    volumes:
+      - /volume1/docker/tdarr/configs:/app/configs
+      - /volume1/docker/tdarr/logs:/app/logs
+      - /volume1/data/media:/media
+      - /volume1/data/transcode_cache:/temp
+      
+  heimdall:
+    image: lscr.io/linuxserver/heimdall:latest
+    container_name: heimdall
+    environment:
+      - PUID=${DOCKERPUID}
+      - PGID=${DOCKERPGID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - /volume1/docker/heimdall:/config
+    networks: 
+      - aml_bridge  
+    ports:
+      - 8080:80
+      - 8443:443
+    restart: unless-stopped
+
+  jellyfin:
+    image: linuxserver/jellyfin:latest
+    container_name: jellyfin
+    environment:
+      - PUID=${DOCKERPUID}
+      - PGID=${DOCKERPGID}
+      - TZ=${TIMEZONE}
+      - JELLYFIN_PublishedServerUrl=${NAS_IP} #optional
+    volumes:
+      - /volume1/docker/jellyfin:/config
+      - /volume1/data/media:/data/media
+    ports:
+      - 8096:8096 #http webui port
+      - 8920:8920 #https webui port (optional)
+      - 7359:7359/udp #Allow local network discovery (optional)
+      #- 1900:1900/udp #Allow DLNA Service discovery (optional - only used for hardware transcoding? I think?)
+    networks:
+      - aml_bridge
+    restart: unless-stopped
+    
+  jellyseerr:
+    image: fallenbagel/jellyseerr:latest
+    container_name: jellyseerr
+    environment:
+     - LOG_LEVEL=debug
+     - PUID=${DOCKERPUID}
+     - PGID=${DOCKERPGID}
+     - TZ=${TIMEZONE}
+    ports:
+     - 5055:5055
+    volumes:
+     - /volume1/docker/jellyseer:/app/config
     networks:
      - aml_bridge
-    restart: unless-stopped  
-    
-    #Need to add in jellyfin/jellyseer yet
+    restart: unless-stopped    
+
     
 networks:
   aml_bridge:
      name: aml_bridge
   
-    
