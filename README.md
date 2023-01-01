@@ -10,18 +10,17 @@ Overarching requirements:
 4. Media server with multiple profiles and local authentication
 5. Media requestor application with search and approvals
 
-So far, I've settled on the *arrs* for media managing and NZBGet and Deluge for download clients, as I'm familiar with them.  Gluetun for VPN and handbrake for re-encoding are both new software to me, but seem to be working ok so far.  Used to use Plex, but want to try Jellyfin because it isn't locked to any cloud authentication like Plex is.  Jellyseer for requests is new to me, but Overseer only works with Plex.  
+So far, I've settled on the *arrs* for media managing and NZBGet and Deluge for download clients, as I'm familiar with them.  Gluetun for VPN and Tdarr are both new software to me, but seem to be working ok so far.  Used to use Plex, but want to try Jellyfin because it isn't locked to any cloud authentication like Plex is.  Jellyseer for requests is new to me, but Overseer only works with Plex.  
 
 
 Components I have working:
 1. Standing up the VPN, and forcing the download clients through the VPN for downloading
 2. Standing up the rest of the *arrs*
-3. Standing up handbrake for re-encoding
+3. Standing up Tdarr, Heimdall, Jellyfin, Jellyseer
 
 Components that still need work:
-1. Getting the *arrs* to look in the postprocessing directory for files, instead of what the download client is passing them based on their request
-2. More configration being done in the compose & .env files instead of in the web-guis.
-3. Installation documentation
-4. Proper use of secrets?
-5. Update compose file to newest spec and ease of use?
-6. Better commenting?
+1. More configration being done in the compose & .env files instead of in the web-guis.
+2. Installation documentation improvements
+3. Proper use of secrets?
+4. Update compose file to newest spec and ease of use?
+5. Better commenting?
