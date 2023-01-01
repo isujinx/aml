@@ -1,0 +1,4 @@
+2023-1-1:    aml.yml - Removed the handbrake container and complicated Sonarr/Radarr path mapping - Replaced with TDarr and standard Sonarr/Radarr path mapping.
+
+2022-12-29:  aml.yml - Initial upload
+             .env  - Initial upload
